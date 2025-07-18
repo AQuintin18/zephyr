@@ -127,6 +127,7 @@ int main(void)
 			if (err != 0) {
 				printk("failed to enqueue CAN frame (err %d)\n", err);
 			}
+			K_MSEC(100);
 		}
 
 #if DT_NODE_EXISTS(BUTTON_NODE)

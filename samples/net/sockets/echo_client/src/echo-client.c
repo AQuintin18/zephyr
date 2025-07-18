@@ -149,6 +149,7 @@ static int start_udp_and_tcp(void)
 	LOG_INF("Starting...");
 
 	if (IS_ENABLED(CONFIG_NET_TCP)) {
+		
 		ret = start_tcp();
 		if (ret < 0) {
 			return ret;

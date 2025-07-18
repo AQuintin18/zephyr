@@ -1,0 +1,54 @@
+cmake:
+  application:
+    configuration-dir: '/home/morealf/zephyrproject/zephyr/samples/drivers/can/babbling'
+    source-dir: '/home/morealf/zephyrproject/zephyr/samples/drivers/can/babbling'
+  board:
+    name: 'nucleo_h753zi'
+    path:
+     - '/home/morealf/zephyrproject/zephyr/boards/st/nucleo_h753zi'
+    qualifiers: 'stm32h753xx'
+    revision: ''
+  devicetree:
+    bindings-dirs:
+     - '/home/morealf/zephyrproject/zephyr/dts/bindings'
+    files:
+     - '/home/morealf/zephyrproject/zephyr/boards/st/nucleo_h753zi/nucleo_h753zi.dts'
+    include-dirs:
+     - '/home/morealf/zephyrproject/modules/hal/ambiq/dts'
+     - '/home/morealf/zephyrproject/modules/hal/atmel/include'
+     - '/home/morealf/zephyrproject/modules/hal/bouffalolab/include'
+     - '/home/morealf/zephyrproject/modules/hal/bouffalolab/include/zephyr'
+     - '/home/morealf/zephyrproject/modules/hal/gigadevice/include'
+     - '/home/morealf/zephyrproject/modules/hal/microchip/include'
+     - '/home/morealf/zephyrproject/modules/hal/microchip/dts'
+     - '/home/morealf/zephyrproject/modules/hal/nuvoton/dts'
+     - '/home/morealf/zephyrproject/modules/hal/nxp/dts'
+     - '/home/morealf/zephyrproject/modules/hal/stm32/dts'
+     - '/home/morealf/zephyrproject/zephyr/include'
+     - '/home/morealf/zephyrproject/zephyr/include/zephyr'
+     - '/home/morealf/zephyrproject/zephyr/dts/common'
+     - '/home/morealf/zephyrproject/zephyr/dts/vendor'
+     - '/home/morealf/zephyrproject/zephyr/dts/rx'
+     - '/home/morealf/zephyrproject/zephyr/dts/x86'
+     - '/home/morealf/zephyrproject/zephyr/dts/xtensa'
+     - '/home/morealf/zephyrproject/zephyr/dts/sparc'
+     - '/home/morealf/zephyrproject/zephyr/dts/riscv'
+     - '/home/morealf/zephyrproject/zephyr/dts/posix'
+     - '/home/morealf/zephyrproject/zephyr/dts/nios2'
+     - '/home/morealf/zephyrproject/zephyr/dts/arm64'
+     - '/home/morealf/zephyrproject/zephyr/dts/arm'
+     - '/home/morealf/zephyrproject/zephyr/dts/arc'
+     - '/home/morealf/zephyrproject/zephyr/dts'
+  kconfig:
+    files:
+     - '/home/morealf/zephyrproject/zephyr/boards/st/nucleo_h753zi/nucleo_h753zi_defconfig'
+     - '/home/morealf/zephyrproject/zephyr/samples/drivers/can/babbling/prj.conf'
+    user-files:
+     - '/home/morealf/zephyrproject/zephyr/samples/drivers/can/babbling/prj.conf'
+  toolchain:
+    name: 'zephyr'
+    path: '/home/morealf/zephyr-sdk-0.17.0'
+  zephyr:
+    version: '4.1.99'
+    zephyr-base: '/home/morealf/zephyrproject/zephyr'
+version: '0.1.0'

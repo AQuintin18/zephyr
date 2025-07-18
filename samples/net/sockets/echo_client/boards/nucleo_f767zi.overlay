@@ -1,0 +1,88 @@
+
+/* Enable SPI1 & lower its address/size cells so we can add child nodes */
+&spi1 {
+    #address-cells = <1>;
+    #size-cells    = <0>;
+    status = "okay";
+    /* CS on PD14 */
+    cs-gpios      = <&gpioa 4 GPIO_ACTIVE_LOW>;
+    pinctrl-0     = <&spi1_sck_pa5 &spi1_mosi_pb5 &spi1_miso_pa6>;
+    pinctrl-names = "default";
+
+    /* ---------- LAN865x MAC‑PHY ------------------------------------------ */
+    eth0: lan865x@0 {
+        compatible         = "microchip,lan865x";
+        reg                = <0>;              /* CS# 0 on this SPI bus      */
+        spi-max-frequency  = <12000000>;
+        int-gpios          = <&gpiob 4 GPIO_ACTIVE_LOW>;
+        rst-gpios          = <&gpiof 12 GPIO_ACTIVE_LOW>;
+        local-mac-address  = [00 19 05 00 00 05];
+
+        lan865x_mdio: lan865x_mdio {
+            compatible = "microchip,lan865x-mdio";
+            status = "okay";
+            #address-cells = <1>;
+            #size-cells = <0>;
+            ethernet-phy@0 {
+                compatible = "microchip,t1s-phy";
+                reg = <0x0>;
+                plca-enable;
+                plca-node-id = <0>;
+                plca-node-count = <8>;
+                plca-burst-count = <0>;
+                plca-burst-timer = <0x80>;
+                plca-to-timer = <0x20>;
+                status = "okay";
+            };
+        };
+        
+        status = "okay";        
+    };
+};
+
+&{/soc/ethernet@40028000} {
+    status = "disabled";
+};
+
+&{/soc/ethernet@40028000/ethernet} {
+    status = "disabled";
+};
+
+&{/soc/ethernet@40028000/mdio} {
+    status = "disabled";
+};
+&{/soc/ethernet@40028000/mdio/ethernet-phy@0}{
+    status = "disabled";
+};
+
+
+
+&pinctrl {
+    spi1_nss_pa4 {
+        pinmux    = <STM32_PINMUX('A', 4, AF5)>;
+        // bias-pull-up;
+        drive-push-pull;
+        slew-rate = "very-high-speed";
+    };
+
+    spi1_sck_pa5 {
+        pinmux    = <STM32_PINMUX('A', 5, AF5)>;
+        bias-disable;
+        drive-push-pull;
+        slew-rate = "very-high-speed";
+    };
+
+    spi1_mosi_pb5 {
+        pinmux    = <STM32_PINMUX('B', 5, AF5)>;
+        bias-pull-down;
+        drive-push-pull;
+        slew-rate = "very-high-speed";
+    };
+
+    spi1_miso_pa6 {
+        pinmux    = <STM32_PINMUX('A', 6, AF5)>;
+        bias-pull-down;
+        drive-push-pull;
+        slew-rate = "very-high-speed";
+    };
+};

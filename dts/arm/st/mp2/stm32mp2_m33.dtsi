@@ -157,7 +157,7 @@
 				#gpio-cells = <2>;
 				reg = <0x442e0000 DT_SIZE_K(1)>;
 				status = "disabled";
-			};
+			};			
 		};
 
 		usart1: serial@40330000 {

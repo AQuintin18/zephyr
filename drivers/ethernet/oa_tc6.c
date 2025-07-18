@@ -53,7 +53,7 @@ int oa_tc6_reg_read(struct oa_tc6 *tc6, const uint32_t reg, uint32_t *val)
 	/* Check if echoed control command header is correct */
 	rv = sys_be32_to_cpu(*(uint32_t *)&buf[4]);
 	if (hdr_bkp != rv) {
-		LOG_ERR("Header transmission error!");
+		LOG_ERR("CHKPT1 Header transmission error!");
 		return -1;
 	}
 
