@@ -104,8 +104,6 @@ static int start_tcp_proto(struct sample_data *data, sa_family_t family,
 		return -errno;
 	}
 
-	LOG_INF("Socket : %d, Proto?: %s", data->tcp.sock, data->proto);
-
 	if (IS_ENABLED(CONFIG_SOCKS)) {
 		struct sockaddr proxy_addr;
 		socklen_t proxy_addrlen;
