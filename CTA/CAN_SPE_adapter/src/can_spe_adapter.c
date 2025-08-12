@@ -17,8 +17,10 @@
  * This might not be what you want to do in your app so caveat emptor.
  */
 
+#include <zephyr/drivers/can.h>
+
 #include <zephyr/logging/log.h>
-LOG_MODULE_REGISTER(net_echo_client_sample, LOG_LEVEL_ERR);
+LOG_MODULE_REGISTER(net_echo_client_sample, LOG_LEVEL_INF);
 
 #include <zephyr/kernel.h>
 #include <errno.h>
@@ -26,7 +28,6 @@ LOG_MODULE_REGISTER(net_echo_client_sample, LOG_LEVEL_ERR);
 
 #include <zephyr/posix/sys/eventfd.h>
 
-#include <zephyr/misc/lorem_ipsum.h>
 #include <zephyr/net/socket.h>
 #include <zephyr/net/tls_credentials.h>
 #include <zephyr/net/net_if.h>
@@ -36,14 +37,17 @@ LOG_MODULE_REGISTER(net_echo_client_sample, LOG_LEVEL_ERR);
 #include <zephyr/net/ethernet.h>
 #include <zephyr/net/ethernet_mgmt.h>
 
-#if defined(CONFIG_USERSPACE)
-#include <zephyr/app_memory/app_memdomain.h>
-K_APPMEM_PARTITION_DEFINE(app_partition);
-struct k_mem_domain app_domain;
-#endif
-
 #include "common.h"
 #include "ca_certificate.h"
+
+
+/* Change these to match your board/device tree aliases */
+#define CAN_DEV_LABEL   "FDCAN1" //DT_LABEL(DT_ALIAS(fdcan1))
+#define ETH_IFACE       net_if_get_default()
+
+#define CAN_FILTER_DATA    CAN_FILTER_IDE //BIT(2)
+
+const struct device *const can_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_canbus));
 
 #define APP_BANNER "Run echo client"
 
@@ -51,12 +55,7 @@ struct k_mem_domain app_domain;
 
 #define EVENT_MASK (NET_EVENT_L4_CONNECTED | \
 		    NET_EVENT_L4_DISCONNECTED)
-#define IPV6_EVENT_MASK (NET_EVENT_IPV6_ADDR_ADD | \
-			 NET_EVENT_IPV6_ADDR_DEPRECATED)
 
-const char lorem_ipsum[] = LOREM_IPSUM;
-
-const int ipsum_len = sizeof(lorem_ipsum) - 1;
 
 APP_DMEM struct configs conf = {
 	.ipv4 = {
@@ -80,7 +79,6 @@ static APP_BMEM bool need_restart;
 K_SEM_DEFINE(run_app, 0, 1);
 
 static struct net_mgmt_event_callback mgmt_cb;
-static struct net_mgmt_event_callback ipv6_mgmt_cb;
 
 static void prepare_fds(void)
 {
@@ -101,19 +99,7 @@ static void prepare_fds(void)
 		fds[nfds].fd = conf.ipv4.tcp.sock;
 		fds[nfds].events = POLLIN;
 		nfds++;
-	}
-
-	if (conf.ipv6.udp.sock >= 0) {
-		fds[nfds].fd = conf.ipv6.udp.sock;
-		fds[nfds].events = POLLIN;
-		nfds++;
-	}
-
-	if (conf.ipv6.tcp.sock >= 0) {
-		fds[nfds].fd = conf.ipv6.tcp.sock;
-		fds[nfds].events = POLLIN;
-		nfds++;
-	}
+	}	
 }
 
 static void wait(void)
@@ -171,25 +157,13 @@ static int start_udp_and_tcp(void)
 
 static int run_udp_and_tcp(void)
 {
-	int ret;
+	int ret = 0;
 
 	wait();
 
-	if (IS_ENABLED(CONFIG_NET_TCP)) {
-		ret = process_tcp();
-		if (ret < 0) {
-			return ret;
-		}
-	}
+	ret = process_tcp();
 
-	if (IS_ENABLED(CONFIG_NET_UDP)) {
-		ret = process_udp();
-		if (ret < 0) {
-			return ret;
-		}
-	}
-
-	return 0;
+	return ret;
 }
 
 static void stop_udp_and_tcp(void)
@@ -205,98 +179,6 @@ static void stop_udp_and_tcp(void)
 	}
 }
 
-static int check_our_ipv6_sockets(int sock,
-				  struct in6_addr *deprecated_addr)
-{
-	struct sockaddr_in6 addr = { 0 };
-	socklen_t addrlen = sizeof(addr);
-	int ret;
-
-	if (sock < 0) {
-		return -EINVAL;
-	}
-
-	ret = getsockname(sock, (struct sockaddr *)&addr, &addrlen);
-	if (ret != 0) {
-		return -errno;
-	}
-
-	if (!net_ipv6_addr_cmp(deprecated_addr, &addr.sin6_addr)) {
-		return -ENOENT;
-	}
-
-	need_restart = true;
-
-	return 0;
-}
-
-static void ipv6_event_handler(struct net_mgmt_event_callback *cb,
-			       uint64_t mgmt_event, struct net_if *iface)
-{
-	static char addr_str[INET6_ADDRSTRLEN];
-
-	if (!IS_ENABLED(CONFIG_NET_IPV6_PE)) {
-		return;
-	}
-
-	if ((mgmt_event & IPV6_EVENT_MASK) != mgmt_event) {
-		return;
-	}
-
-	if (cb->info == NULL ||
-	    cb->info_length != sizeof(struct in6_addr)) {
-		return;
-	}
-
-	if (mgmt_event == NET_EVENT_IPV6_ADDR_ADD) {
-		struct net_if_addr *ifaddr;
-		struct in6_addr added_addr;
-
-		memcpy(&added_addr, cb->info, sizeof(struct in6_addr));
-
-		ifaddr = net_if_ipv6_addr_lookup(&added_addr, &iface);
-		if (ifaddr == NULL) {
-			return;
-		}
-
-		/* Wait until we get a temporary address before continuing after
-		 * boot.
-		 */
-		if (ifaddr->is_temporary) {
-			static bool once;
-
-			LOG_INF("Temporary IPv6 address %s added",
-				inet_ntop(AF_INET6, &added_addr, addr_str,
-					  sizeof(addr_str) - 1));
-
-			if (!once) {
-				k_sem_give(&run_app);
-				once = true;
-			}
-		}
-	}
-
-	if (mgmt_event == NET_EVENT_IPV6_ADDR_DEPRECATED) {
-		struct in6_addr deprecated_addr;
-
-		memcpy(&deprecated_addr, cb->info, sizeof(struct in6_addr));
-
-		LOG_INF("IPv6 address %s deprecated",
-			inet_ntop(AF_INET6, &deprecated_addr, addr_str,
-				  sizeof(addr_str) - 1));
-
-		(void)check_our_ipv6_sockets(conf.ipv6.tcp.sock,
-					     &deprecated_addr);
-		(void)check_our_ipv6_sockets(conf.ipv6.udp.sock,
-					     &deprecated_addr);
-
-		if (need_restart) {
-			eventfd_write(fds[0].fd, 1);
-		}
-
-		return;
-	}
-}
 
 static void event_handler(struct net_mgmt_event_callback *cb,
 			  uint64_t mgmt_event, struct net_if *iface)
@@ -352,19 +234,6 @@ static void init_app(void)
 {
 	LOG_INF(APP_BANNER);
 
-#if defined(CONFIG_USERSPACE)
-	struct k_mem_partition *parts[] = {
-#if Z_LIBC_PARTITION_EXISTS
-		&z_libc_partition,
-#endif
-		&app_partition
-	};
-
-	int ret = k_mem_domain_init(&app_domain, ARRAY_SIZE(parts), parts);
-
-	__ASSERT(ret == 0, "k_mem_domain_init() failed %d", ret);
-	ARG_UNUSED(ret);
-#endif
 
 #if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
 	int err = tls_credential_add(CA_CERTIFICATE_TAG,
@@ -402,13 +271,42 @@ static void init_app(void)
 		conn_mgr_mon_resend_status();
 	}
 
-	net_mgmt_init_event_callback(&ipv6_mgmt_cb,
-				     ipv6_event_handler, IPV6_EVENT_MASK);
-	net_mgmt_add_event_callback(&ipv6_mgmt_cb);
-
-	init_vlan();
 	init_udp();
 	init_macaddr();
+}
+
+#define ETH_P_CAN_DATA  0x88B5  /* Private EtherType for CAN-over-Ethernet */
+
+/* CAN RX callback: called in interrupt context */
+static void can_rx_cb(const struct device *dev,
+                      struct can_frame *frame)
+{
+	static int cnt = 0;
+	static struct can_frame frame_to_send = {0};
+    
+	memcpy(&frame_to_send, frame, sizeof(struct can_frame));
+
+	/* Encode CAN ID (32-bit) and data */
+	send_buf_tcp(&conf.ipv4,&(frame_to_send.id), sizeof(frame_to_send.id));
+	send_buf_tcp(&conf.ipv4,frame_to_send.data, frame->dlc);
+
+	uint8_t dbg[128] = {0};
+	for(int i = 0; i < frame->dlc ; i++)
+	{
+		sprintf(&dbg[i*3],"%02X ",frame_to_send.data[i]);	
+	}	
+
+	LOG_DBG("Sent CAN Frame over SPE. ID : 0x%02X , Frame : %s",frame_to_send.id,dbg);
+	if(++cnt % 100 == 0) {
+		LOG_INF("Sent %d CAN frames", cnt);
+	}
+
+}
+
+
+void relay_to_server()
+{
+	send_tcp_data(&conf.ipv4);
 }
 
 static void start_client(void *p1, void *p2, void *p3)
@@ -424,12 +322,7 @@ static void start_client(void *p1, void *p2, void *p3)
 	while (iterations == 0 || i < iterations) {
 		/* Wait for the connection. */
 		k_sem_take(&run_app, K_FOREVER);
-
-		if (IS_ENABLED(CONFIG_NET_IPV6_PE)) {
-			/* Make sure that we have a temporary address */
-			k_sleep(K_SECONDS(1));
-		}
-
+		
 		do {
 			if (need_restart) {
 				/* Close all sockets and get a fresh restart */
@@ -463,6 +356,33 @@ int main(void)
 {
 	init_app();
 
+	struct can_filter filter = {
+        .id     = 0x29,
+        .mask   = 0U,          /* accept all IDs */
+        .flags  = CAN_FILTER_DATA,
+    };
+
+    
+
+    if (!can_dev) {
+        LOG_ERR("CAN device %s not found", CAN_DEV_LABEL);
+        return;
+    }  
+
+    /* Install filter + RX callback */
+    int ret = can_add_rx_filter(can_dev,can_rx_cb, NULL, &filter);
+
+
+	int err = can_start(can_dev);
+	if (err != 0) {
+		printk("Error starting CAN controller (err %d)", err);
+		return 0;
+	}
+
+	LOG_INF("CAN filter return : %d", ret);
+
+    LOG_INF("CAN→SPE bridge running");
+
 	if (!IS_ENABLED(CONFIG_NET_CONNECTION_MANAGER)) {
 		/* If the config library has not been configured to start the
 		 * app only after we have a connection, then we can start
@@ -474,13 +394,7 @@ int main(void)
 
 	k_thread_priority_set(k_current_get(), THREAD_PRIORITY);
 
-#if defined(CONFIG_USERSPACE)
-	k_thread_access_grant(k_current_get(), &run_app);
-	k_mem_domain_add_thread(&app_domain, k_current_get());
-
-	k_thread_user_mode_enter(start_client, NULL, NULL, NULL);
-#else
 	start_client(NULL, NULL, NULL);
-#endif
+
 	return 0;
 }

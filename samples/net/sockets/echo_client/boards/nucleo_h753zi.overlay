@@ -4,20 +4,23 @@
     #address-cells = <1>;
     #size-cells    = <0>;
     status = "okay";
-    /* CS on PD14 */
-    cs-gpios      = <&gpiod 14 GPIO_ACTIVE_LOW>;
-    pinctrl-0     = <&spi1_sck_pa5 &spi1_mosi_pb5 &spi1_miso_pa6>;
+    // /* CS on PD14 */
+    // cs-gpios      = <&gpiod 14 GPIO_ACTIVE_LOW>;
+    pinctrl-0     = <&spi1_sck_pa5 &spi1_mosi_pb5 &spi1_miso_pa6 &spi1_cs_pd14>;
     pinctrl-names = "default";
 
     /* ---------- LAN865x MAC‑PHY ------------------------------------------ */
     eth0: lan865x@0 {
         compatible         = "microchip,lan865x";
         reg                = <0>;              /* CS# 0 on this SPI bus      */
-        spi-max-frequency  = <12000000>;
+        spi-max-frequency  = <25000000>;
         int-gpios          = <&gpiob 4 GPIO_ACTIVE_LOW>;
         rst-gpios          = <&gpiof 3 GPIO_ACTIVE_LOW>;
-        local-mac-address  = [00 19 05 00 00 04];
+        local-mac-address  = [00 19 05 00 00 05];
 
+        tx-cut-through-mode;
+        rx-cut-through-mode;
+        
         lan865x_mdio: lan865x_mdio {
             compatible = "microchip,lan865x-mdio";
             status = "okay";
@@ -27,27 +30,44 @@
                 compatible = "microchip,t1s-phy";
                 reg = <0x0>;
                 plca-enable;
-                plca-node-id = <0>;
-                plca-node-count = <8>;
-                plca-burst-count = <0>;
-                plca-burst-timer = <0x80>;
+                plca-node-id = <1>;
+                plca-node-count = <2>;
+                plca-burst-count = <4>;
+                plca-burst-timer = <0>;
                 plca-to-timer = <0x20>;
                 status = "okay";
             };
-        };
-
-        
-        
+        };   
+                
         status = "okay";        
     };
 };
 
-&ethernet@40028000{
+&{/soc/ethernet@40028000}{
+    status = "disabled";
+};
+&{/soc/ethernet@40028000/ethernet}{
+    status = "disabled";
+};
+
+&{/soc/ethernet@40028000/mdio}{
+    status = "disabled";
+};
+
+&{/soc/ethernet@40028000/mdio/ethernet-phy@0}{
     status = "disabled";
 };
 
 
 &pinctrl {
+    spi1_cs_pd14: spi1_cs_pd14 {
+        pinmux = <STM32_PINMUX('D', 14, GPIO)>;   /* <-- GPIO, not AF5 */
+        drive-push-pull;
+        output-low;
+        bias-pull-up;
+        slew-rate = "very-high-speed";
+    };
+
     spi1_sck_pa5 {
         pinmux    = <STM32_PINMUX('A', 5, AF5)>;
         bias-pull-down;

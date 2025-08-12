@@ -1,4 +1,21 @@
 
+// &fdcan1 {
+//     compatible         = "st,stm32h7-fdcan";
+//     #address-cells = <1>;
+//     #size-cells    = <0>;
+//     status = "okay";
+//     bosch,mram-cfg = 
+//     // pinctrl-0     = <&can1_rx_pd0 &can1_tx_pd1>;
+    
+//     pinctrl-names = "default";
+// };
+
+&fdcan1 { // Replace with the actual node name for your CAN controller
+        status = "okay";
+        bus-speed = <500000>;
+        // Other CAN controller properties like pinctrl-0, pinctrl-names, etc.
+};
+
 /* Enable SPI1 & lower its address/size cells so we can add child nodes */
 &spi1 {
     #address-cells = <1>;
@@ -16,11 +33,11 @@
         spi-max-frequency  = <25000000>;
         int-gpios          = <&gpiob 4 GPIO_ACTIVE_LOW>;
         rst-gpios          = <&gpiof 3 GPIO_ACTIVE_LOW>;
-        local-mac-address  = [00 19 05 00 00 04];
+        local-mac-address  = [00 19 05 00 00 05];
 
         tx-cut-through-mode;
         rx-cut-through-mode;
-
+        
         lan865x_mdio: lan865x_mdio {
             compatible = "microchip,lan865x-mdio";
             status = "okay";
@@ -30,7 +47,7 @@
                 compatible = "microchip,t1s-phy";
                 reg = <0x0>;
                 plca-enable;
-                plca-node-id = <0>;
+                plca-node-id = <1>;
                 plca-node-count = <2>;
                 plca-burst-count = <4>;
                 plca-burst-timer = <0>;
@@ -89,17 +106,13 @@
         slew-rate = "very-high-speed";
     };
 
-    phy_rst {
-        pinmux    = <STM32_PINMUX('F', 3, GPIO)>;
-        bias-pull-down;
-        output-low;
-        drive-push-pull;
+    can1_rx_pd0 {
+        pinmux    = <STM32_PINMUX('D', 0, AF9)>;
         slew-rate = "very-high-speed";
     };
 
-    phy_int {
-        pinmux    = <STM32_PINMUX('B', 4, GPIO)>;
-        bias-pull-down;        
+    can1_tx_pd1 {
+        pinmux    = <STM32_PINMUX('D', 1, AF9)>;
         drive-push-pull;
         slew-rate = "very-high-speed";
     };

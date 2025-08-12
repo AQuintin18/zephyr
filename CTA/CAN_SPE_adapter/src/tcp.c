@@ -46,17 +46,43 @@ static ssize_t sendall(int sock, const void *buf, size_t len)
 	return 0;
 }
 
-static int send_tcp_data(struct sample_data *data)
+int send_tcp_data(struct sample_data *data)
+{
+	int ret = 0;
+
+	// do {
+	// 	data->tcp.expecting = sys_rand32_get() % ipsum_len;
+	// } while (data->tcp.expecting == 0U);
+
+	// data->tcp.received = 0U;
+
+	// // ret =  sendall(data->tcp.sock, lorem_ipsum, data->tcp.expecting);
+
+	// if (ret < 0) {
+	// 	LOG_ERR("%s TCP: Failed to send data, errno %d", data->proto,
+	// 		errno);
+	// } else {
+	// 	if (PRINT_PROGRESS) {
+	// 		LOG_DBG("%s TCP: Sent %d bytes", data->proto,
+	// 			data->tcp.expecting);
+	// 	}
+	// }
+
+	return ret;
+}
+
+int send_buf_tcp(struct sample_data *data, uint8_t *data_buffer, uint32_t len)
 {
 	int ret;
 
-	do {
-		data->tcp.expecting = sys_rand32_get() % ipsum_len;
-	} while (data->tcp.expecting == 0U);
+	if(len)
+	{
+		data->tcp.expecting = len;
+	}
 
 	data->tcp.received = 0U;
 
-	ret =  sendall(data->tcp.sock, lorem_ipsum, data->tcp.expecting);
+	ret =  sendall(data->tcp.sock, data_buffer, data->tcp.expecting);
 
 	if (ret < 0) {
 		LOG_ERR("%s TCP: Failed to send data, errno %d", data->proto,
@@ -69,21 +95,6 @@ static int send_tcp_data(struct sample_data *data)
 	}
 
 	return ret;
-}
-
-static int compare_tcp_data(struct sample_data *data, const char *buf, uint32_t received)
-{
-	if (data->tcp.received + received > data->tcp.expecting) {
-		LOG_ERR("Too much data received: TCP %s", data->proto);
-		return -EIO;
-	}
-
-	if (memcmp(buf, lorem_ipsum + data->tcp.received, received) != 0) {
-		LOG_ERR("Invalid data received: TCP %s", data->proto);
-		return -EIO;
-	}
-
-	return 0;
 }
 
 static int start_tcp_proto(struct sample_data *data, sa_family_t family,
@@ -182,7 +193,13 @@ static int process_tcp_proto(struct sample_data *data)
 			}
 			continue;
 		}
-		
+
+		/* Successful comparison. */
+		data->tcp.received += received;
+		if (data->tcp.received < data->tcp.expecting) {
+			continue;
+		}
+
 		ret = send_tcp_data(data);
 
 		break;
@@ -195,7 +212,6 @@ int start_tcp(void)
 {
 	int ret = 0;
 	struct sockaddr_in addr4;
-
 	
 	if (IS_ENABLED(CONFIG_NET_IPV4)) {
 		addr4.sin_family = AF_INET;

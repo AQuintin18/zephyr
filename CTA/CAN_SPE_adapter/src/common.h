@@ -72,6 +72,10 @@ struct configs {
 #define CONFIG_NET_CONFIG_PEER_IPV4_ADDR ""
 #endif
 
+#if !defined(CONFIG_NET_CONFIG_PEER_IPV6_ADDR)
+#define CONFIG_NET_CONFIG_PEER_IPV6_ADDR ""
+#endif
+
 extern const char lorem_ipsum[];
 extern const int ipsum_len;
 extern struct configs conf;
@@ -94,3 +98,4 @@ static inline void stop_udp(void) { }
 int start_tcp(void);
 int process_tcp(void);
 void stop_tcp(void);
+int send_buf_tcp(struct sample_data *data, uint8_t *data_buffer, uint32_t len);

@@ -8,7 +8,7 @@
  */
 
 #include <zephyr/logging/log.h>
-LOG_MODULE_REGISTER(net_echo_server_sample, LOG_LEVEL_DBG);
+LOG_MODULE_REGISTER(net_echo_server_sample, LOG_LEVEL_INF);
 
 #include <zephyr/kernel.h>
 #include <zephyr/linker/sections.h>
