@@ -178,7 +178,21 @@ static int process_tcp_proto(struct sample_data *data)
 	int ret, received;
 	char buf[RECV_BUF_SIZE];
 
+	can_frame_t frame_to_send = {0};
+
 	do {
+
+		int can_rcv = k_msgq_get(&can_msgq, &frame_to_send, K_NO_WAIT);
+	    if(can_rcv == 0) {
+			LOG_INF("CAN frame received, sending TCP data");
+			ret = send_buf_tcp(data, (uint8_t*)&frame_to_send, sizeof(frame_to_send));
+			//Receievd CAN frame, send it over TCP
+		} else if (can_rcv == -ENOMSG) { // Queue purged by other thread
+			LOG_DBG("No CAN frame received, sending TCP data");
+		} else if (can_rcv == -EAGAIN) { 
+			LOG_DBG("No CAN frame received, msgq_get timed out");
+		}
+
 		received = recv(data->tcp.sock, buf, sizeof(buf), MSG_DONTWAIT);
 
 		/* No data or error. */
@@ -193,15 +207,12 @@ static int process_tcp_proto(struct sample_data *data)
 			}
 			continue;
 		}
-
-		/* Successful comparison. */
+		/* Data received. */
 		data->tcp.received += received;
 		if (data->tcp.received < data->tcp.expecting) {
 			continue;
 		}
-
-		ret = send_tcp_data(data);
-
+		
 		break;
 	} while (received > 0);
 

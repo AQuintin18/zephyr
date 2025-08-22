@@ -1,4 +1,4 @@
-/* echo-client.c - Networking echo client */
+/* can_spe_adapter.c - Transceiver for CTA */
 
 /*
  * Copyright (c) 2017 Intel Corporation.
@@ -6,18 +6,6 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-
-/*
- * The echo-client application is acting as a client that is run in Zephyr OS,
- * and echo-server is run in the host acting as a server. The client will send
- * either unicast or multicast packets to the server which will reply the packet
- * back to the originator.
- *
- * In this sample application we create four threads that start to send data.
- * This might not be what you want to do in your app so caveat emptor.
- */
-
-#include <zephyr/drivers/can.h>
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(net_echo_client_sample, LOG_LEVEL_INF);
@@ -42,9 +30,6 @@ LOG_MODULE_REGISTER(net_echo_client_sample, LOG_LEVEL_INF);
 
 
 /* Change these to match your board/device tree aliases */
-#define CAN_DEV_LABEL   "FDCAN1" //DT_LABEL(DT_ALIAS(fdcan1))
-#define ETH_IFACE       net_if_get_default()
-
 #define CAN_FILTER_DATA    CAN_FILTER_IDE //BIT(2)
 
 const struct device *const can_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_canbus));
@@ -80,6 +65,21 @@ K_SEM_DEFINE(run_app, 0, 1);
 
 static struct net_mgmt_event_callback mgmt_cb;
 
+
+
+#define CAN_QUEUE_SIZE 10U
+#define CAN_FRAME_SIZE sizeof(can_frame_t)
+
+#define SPE_QUEUE_SIZE 10U
+#define SPE_FRAME_SIZE sizeof(spe_msg_frame_t)
+
+static uint8_t can_msgq_buffer[CAN_QUEUE_SIZE * CAN_FRAME_SIZE];
+struct k_msgq can_msgq;
+
+static uint8_t spe_msgq_buffer[SPE_QUEUE_SIZE * SPE_FRAME_SIZE];
+struct k_msgq spe_msgq;
+
+
 static void prepare_fds(void)
 {
 	nfds = 0;
@@ -109,7 +109,7 @@ static void wait(void)
 	/* Wait for event on any socket used. Once event occurs,
 	 * we'll check them all.
 	 */
-	ret = poll(fds, nfds, -1);
+	ret = poll(fds, nfds, 100);
 	if (ret < 0) {
 		static bool once;
 
@@ -271,11 +271,12 @@ static void init_app(void)
 		conn_mgr_mon_resend_status();
 	}
 
+	k_msgq_init(&can_msgq, can_msgq_buffer, CAN_FRAME_SIZE, CAN_QUEUE_SIZE);
+	k_msgq_init(&spe_msgq, spe_msgq_buffer, SPE_FRAME_SIZE, SPE_QUEUE_SIZE);
+
 	init_udp();
 	init_macaddr();
 }
-
-#define ETH_P_CAN_DATA  0x88B5  /* Private EtherType for CAN-over-Ethernet */
 
 /* CAN RX callback: called in interrupt context */
 static void can_rx_cb(const struct device *dev,
@@ -286,27 +287,28 @@ static void can_rx_cb(const struct device *dev,
     
 	memcpy(&frame_to_send, frame, sizeof(struct can_frame));
 
-	/* Encode CAN ID (32-bit) and data */
-	send_buf_tcp(&conf.ipv4,&(frame_to_send.id), sizeof(frame_to_send.id));
-	send_buf_tcp(&conf.ipv4,frame_to_send.data, frame->dlc);
-
-	uint8_t dbg[128] = {0};
+    uint8_t dbg[128] = {0};
 	for(int i = 0; i < frame->dlc ; i++)
 	{
 		sprintf(&dbg[i*3],"%02X ",frame_to_send.data[i]);	
 	}	
+	LOG_DBG("Received CAN Frame. ID : 0x%02X , Frame : %s",frame_to_send.id,dbg);
 
-	LOG_DBG("Sent CAN Frame over SPE. ID : 0x%02X , Frame : %s",frame_to_send.id,dbg);
-	if(++cnt % 100 == 0) {
-		LOG_INF("Sent %d CAN frames", cnt);
+	while (k_msgq_put(&can_msgq, &frame, K_NO_WAIT) != 0) {
+		/* message queue is full: purge old data & try again */
+		k_msgq_purge(&can_msgq);
 	}
 
-}
+	/* Encode CAN ID (32-bit) and data */
+	// send_buf_tcp(&conf.ipv4,&(frame_to_send.id), sizeof(frame_to_send.id));
+	// send_buf_tcp(&conf.ipv4,frame_to_send.data, frame->dlc);
 
+	
+	// LOG_DBG("Sent CAN Frame over SPE. ID : 0x%02X , Frame : %s",frame_to_send.id,dbg);
+	// if(++cnt % 100 == 0) {
+	// 	LOG_INF("Sent %d CAN frames", cnt);
+	// }
 
-void relay_to_server()
-{
-	send_tcp_data(&conf.ipv4);
 }
 
 static void start_client(void *p1, void *p2, void *p3)
@@ -361,16 +363,19 @@ int main(void)
         .mask   = 0U,          /* accept all IDs */
         .flags  = CAN_FILTER_DATA,
     };
-
-    
+   
 
     if (!can_dev) {
-        LOG_ERR("CAN device %s not found", CAN_DEV_LABEL);
+        LOG_ERR("CAN device not found");
         return;
-    }  
+    }
+	
+	if (!device_is_ready(can_dev)) {
+		LOG_ERR("CAN device %s is not ready", can_dev->name);
+		return;
+	}
 
-    /* Install filter + RX callback */
-    int ret = can_add_rx_filter(can_dev,can_rx_cb, NULL, &filter);
+	can_set_mode(can_dev, CAN_MODE_NORMAL);
 
 
 	int err = can_start(can_dev);
@@ -378,6 +383,10 @@ int main(void)
 		printk("Error starting CAN controller (err %d)", err);
 		return 0;
 	}
+
+	 /* Install filter + RX callback */
+    int ret = can_add_rx_filter_msgq(can_dev, &can_msgq, &filter);    //can_add_rx_filter(can_dev,can_rx_cb, NULL, &filter);
+	
 
 	LOG_INF("CAN filter return : %d", ret);
 

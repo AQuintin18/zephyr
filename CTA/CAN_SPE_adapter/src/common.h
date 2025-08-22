@@ -6,6 +6,7 @@
  */
 
 #include <zephyr/kernel.h>
+#include <zephyr/drivers/can.h>
 
 #include "net_sample_common.h"
 
@@ -76,9 +77,22 @@ struct configs {
 #define CONFIG_NET_CONFIG_PEER_IPV6_ADDR ""
 #endif
 
-extern const char lorem_ipsum[];
-extern const int ipsum_len;
 extern struct configs conf;
+
+extern struct k_msgq can_msgq;
+extern struct k_msgq spe_msgq;
+
+typedef struct can_frame can_frame_t;
+
+typedef struct {
+	uint16_t msg_type;
+	uint32_t data_len;
+	union{
+		can_frame_t can_frame;
+		uint8_t data[sizeof(can_frame_t)];
+	};
+	uint32_t crc;
+} spe_msg_frame_t;
 
 #if defined(CONFIG_NET_UDP)
 /* init_udp initializes kernel objects, hence it has to be called from
