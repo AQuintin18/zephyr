@@ -8,7 +8,7 @@
  */
 
 #include <zephyr/logging/log.h>
-LOG_MODULE_REGISTER(net_echo_client_sample, LOG_LEVEL_INF);
+LOG_MODULE_REGISTER(net_echo_client_sample, LOG_LEVEL_DBG);
 
 #include <zephyr/kernel.h>
 #include <errno.h>
@@ -26,13 +26,9 @@ LOG_MODULE_REGISTER(net_echo_client_sample, LOG_LEVEL_INF);
 #include <zephyr/net/ethernet_mgmt.h>
 
 #include "common.h"
+#include "app_can.h"
 #include "ca_certificate.h"
 
-
-/* Change these to match your board/device tree aliases */
-#define CAN_FILTER_DATA    CAN_FILTER_IDE //BIT(2)
-
-const struct device *const can_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_canbus));
 
 #define APP_BANNER "Run echo client"
 
@@ -63,15 +59,19 @@ static APP_BMEM bool need_restart;
 
 K_SEM_DEFINE(run_app, 0, 1);
 
+K_THREAD_DEFINE(can_tid, CAN_THREAD_STACK_SIZE,
+					can_thread, NULL, NULL, NULL,
+					CAN_THREAD_PRIORITY, 0, 0);
+
 static struct net_mgmt_event_callback mgmt_cb;
 
 
 
-#define CAN_QUEUE_SIZE 10U
+#define CAN_QUEUE_SIZE 50U
 #define CAN_FRAME_SIZE sizeof(can_frame_t)
 
 #define SPE_QUEUE_SIZE 10U
-#define SPE_FRAME_SIZE sizeof(spe_msg_frame_t)
+#define SPE_FRAME_SIZE sizeof(can_frame_t) // can_frame_t for now. Should be spe_frame_t when not tested with echo_server
 
 static uint8_t can_msgq_buffer[CAN_QUEUE_SIZE * CAN_FRAME_SIZE];
 struct k_msgq can_msgq;
@@ -155,7 +155,7 @@ static int start_udp_and_tcp(void)
 	return 0;
 }
 
-static int run_udp_and_tcp(void)
+__attribute__((unused)) static int run_udp_and_tcp(void)
 {
 	int ret = 0;
 
@@ -278,38 +278,6 @@ static void init_app(void)
 	init_macaddr();
 }
 
-/* CAN RX callback: called in interrupt context */
-static void can_rx_cb(const struct device *dev,
-                      struct can_frame *frame)
-{
-	static int cnt = 0;
-	static struct can_frame frame_to_send = {0};
-    
-	memcpy(&frame_to_send, frame, sizeof(struct can_frame));
-
-    uint8_t dbg[128] = {0};
-	for(int i = 0; i < frame->dlc ; i++)
-	{
-		sprintf(&dbg[i*3],"%02X ",frame_to_send.data[i]);	
-	}	
-	LOG_DBG("Received CAN Frame. ID : 0x%02X , Frame : %s",frame_to_send.id,dbg);
-
-	while (k_msgq_put(&can_msgq, &frame, K_NO_WAIT) != 0) {
-		/* message queue is full: purge old data & try again */
-		k_msgq_purge(&can_msgq);
-	}
-
-	/* Encode CAN ID (32-bit) and data */
-	// send_buf_tcp(&conf.ipv4,&(frame_to_send.id), sizeof(frame_to_send.id));
-	// send_buf_tcp(&conf.ipv4,frame_to_send.data, frame->dlc);
-
-	
-	// LOG_DBG("Sent CAN Frame over SPE. ID : 0x%02X , Frame : %s",frame_to_send.id,dbg);
-	// if(++cnt % 100 == 0) {
-	// 	LOG_INF("Sent %d CAN frames", cnt);
-	// }
-
-}
 
 static void start_client(void *p1, void *p2, void *p3)
 {
@@ -335,7 +303,9 @@ static void start_client(void *p1, void *p2, void *p3)
 			ret = start_udp_and_tcp();
 
 			while (connected && (ret == 0)) {
-				ret = run_udp_and_tcp();
+
+				ret = process_tcp_proto(&conf.ipv4);
+				// ret = run_udp_and_tcp();
 
 				if (iterations > 0) {
 					i++;
@@ -344,9 +314,10 @@ static void start_client(void *p1, void *p2, void *p3)
 					}
 				}
 
-				if (need_restart) {
-					break;
-				}
+				// if (need_restart) {
+				// 	break;
+				// }
+				k_yield();
 			}
 		} while (need_restart);
 
@@ -356,39 +327,12 @@ static void start_client(void *p1, void *p2, void *p3)
 
 int main(void)
 {
+	//log_thread_set(k_current_get());
+	//k_thread_suspend(can_tid);
+
 	init_app();
 
-	struct can_filter filter = {
-        .id     = 0x29,
-        .mask   = 0U,          /* accept all IDs */
-        .flags  = CAN_FILTER_DATA,
-    };
-   
-
-    if (!can_dev) {
-        LOG_ERR("CAN device not found");
-        return;
-    }
 	
-	if (!device_is_ready(can_dev)) {
-		LOG_ERR("CAN device %s is not ready", can_dev->name);
-		return;
-	}
-
-	can_set_mode(can_dev, CAN_MODE_NORMAL);
-
-
-	int err = can_start(can_dev);
-	if (err != 0) {
-		printk("Error starting CAN controller (err %d)", err);
-		return 0;
-	}
-
-	 /* Install filter + RX callback */
-    int ret = can_add_rx_filter_msgq(can_dev, &can_msgq, &filter);    //can_add_rx_filter(can_dev,can_rx_cb, NULL, &filter);
-	
-
-	LOG_INF("CAN filter return : %d", ret);
 
     LOG_INF("CAN→SPE bridge running");
 
@@ -401,7 +345,11 @@ int main(void)
 		k_sem_give(&run_app);
 	}
 
-	k_thread_priority_set(k_current_get(), THREAD_PRIORITY);
+	//k_thread_start(can_tid);
+
+	//k_thread_priority_set(k_current_get(), THREAD_PRIORITY);
+
+	k_yield();
 
 	start_client(NULL, NULL, NULL);
 

@@ -34,7 +34,7 @@ extern struct k_mem_domain app_domain;
 #if defined(CONFIG_NET_TC_THREAD_PREEMPTIVE)
 #define THREAD_PRIORITY K_PRIO_PREEMPT(8)
 #else
-#define THREAD_PRIORITY K_PRIO_COOP(CONFIG_NUM_COOP_PRIORITIES - 1)
+#define THREAD_PRIORITY -2
 #endif
 
 #define UDP_STACK_SIZE 2048
@@ -113,3 +113,4 @@ int start_tcp(void);
 int process_tcp(void);
 void stop_tcp(void);
 int send_buf_tcp(struct sample_data *data, uint8_t *data_buffer, uint32_t len);
+int process_tcp_proto(struct sample_data *data);

@@ -8,7 +8,7 @@
  */
 
 #include <zephyr/logging/log.h>
-LOG_MODULE_DECLARE(net_echo_client_sample, LOG_LEVEL_DBG);
+LOG_MODULE_DECLARE(net_echo_client_sample, LOG_LEVEL_INF);
 
 #include <zephyr/kernel.h>
 #include <errno.h>
@@ -100,7 +100,6 @@ int send_buf_tcp(struct sample_data *data, uint8_t *data_buffer, uint32_t len)
 static int start_tcp_proto(struct sample_data *data, sa_family_t family,
 			   struct sockaddr *addr, socklen_t addrlen)
 {
-	int optval;
 	int ret;
 
 #if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
@@ -173,10 +172,12 @@ static int start_tcp_proto(struct sample_data *data, sa_family_t family,
 	return ret;
 }
 
-static int process_tcp_proto(struct sample_data *data)
+int process_tcp_proto(struct sample_data *data)
 {
-	int ret, received;
-	char buf[RECV_BUF_SIZE];
+	int ret = 0;
+	int received = 0;
+	char buf[RECV_BUF_SIZE] = { 0 };
+	static uint32_t cnt = 0;
 
 	can_frame_t frame_to_send = {0};
 
@@ -184,7 +185,11 @@ static int process_tcp_proto(struct sample_data *data)
 
 		int can_rcv = k_msgq_get(&can_msgq, &frame_to_send, K_NO_WAIT);
 	    if(can_rcv == 0) {
-			LOG_INF("CAN frame received, sending TCP data");
+			
+			if(++cnt % 100 == 0)
+			{
+				LOG_INF("100 CAN frames sent over SPE");
+			}	
 			ret = send_buf_tcp(data, (uint8_t*)&frame_to_send, sizeof(frame_to_send));
 			//Receievd CAN frame, send it over TCP
 		} else if (can_rcv == -ENOMSG) { // Queue purged by other thread
@@ -193,13 +198,19 @@ static int process_tcp_proto(struct sample_data *data)
 			LOG_DBG("No CAN frame received, msgq_get timed out");
 		}
 
+		if (ret < 0) {
+			return ret;
+		}
+
 		received = recv(data->tcp.sock, buf, sizeof(buf), MSG_DONTWAIT);
 
 		/* No data or error. */
 		if (received == 0) {
+			LOG_DBG("No data received");
 			ret = -EIO;
 			continue;
 		} else if (received < 0) {
+			//LOG_DBG("Error receiving TCP data errno : %d", errno);
 			if (errno == EAGAIN || errno == EWOULDBLOCK) {
 				ret = 0;
 			} else {
@@ -209,12 +220,13 @@ static int process_tcp_proto(struct sample_data *data)
 		}
 		/* Data received. */
 		data->tcp.received += received;
+		k_msgq_put(&spe_msgq, buf, K_NO_WAIT); // Send over to CAN thread
 		if (data->tcp.received < data->tcp.expecting) {
 			continue;
 		}
 		
 		break;
-	} while (received > 0);
+	} while (received > 0 || k_msgq_num_used_get(&can_msgq) > 0);
 
 	return ret;
 }

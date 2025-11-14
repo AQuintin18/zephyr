@@ -18,10 +18,11 @@ if(CONFIG_NET_SOCKETS_SOCKOPT_TLS AND
   add_dependencies(app development_psk)
 endif()
 
-target_sources(                     app PRIVATE src/can_spe_adapter.c)
+target_sources(                     app PRIVATE src/can_spe_adapter.c src/app_can.c)
 target_sources_ifdef(CONFIG_NET_UDP app PRIVATE src/udp.c)
 target_sources_ifdef(CONFIG_NET_TCP app PRIVATE src/tcp.c)
 
+target_include_directories(app PRIVATE src/)
 include(${ZEPHYR_BASE}/samples/net/common/common.cmake)
 
 set(gen_dir ${ZEPHYR_BINARY_DIR}/include/generated/)
